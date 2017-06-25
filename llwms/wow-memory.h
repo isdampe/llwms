@@ -6,6 +6,9 @@ typedef struct TargetObject TargetObject;
 struct GameData {
 	short status;
 	short state;
+	short isConnected;
+	int zone;
+	uint64_t mouseOverGuid;
 };
 
 struct PlayerObject {
@@ -20,8 +23,12 @@ struct PlayerObject {
 	long maxHealth;
 	long mana;
 	long maxMana;
-	uint64_t *playerTargetGuid;
-	TargetObject *playerTarget;
+	uint64_t targetGuid;
+	TargetObject *target;
+};
+
+struct PlayerAddresses {
+
 };
 
 struct TargetObject {
