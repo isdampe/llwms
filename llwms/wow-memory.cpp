@@ -18,6 +18,8 @@ public:
 	void ReadGameData();
 	void ReadPlayerData();
 	void ReadObjectData();
+	void ReadTargetData(DWORD_PTR objAddress);
+	void PrependMinableObject(DWORD_PTR objAddress);
 	DWORD_PTR ProcGetBaseAddress(DWORD processId, HANDLE *processHandle);
 
 	//Data
@@ -29,6 +31,7 @@ public:
 	GameData game;
 	PlayerObject player;
 	TargetObject target;
+	GatherObject *firstGatherObject;
 };
 
 /*
@@ -45,6 +48,8 @@ inline WowMemory::WowMemory() {
 		return;
 	}
 
+	//Reset the linked list.
+	this->firstGatherObject = 0x0;
 	this->ComputeMemoryAddresses();
 
 }
@@ -100,8 +105,6 @@ inline void WowMemory::Update() {
 	if (this->game.state == 0) {
 		return;
 	}
-
-	
 
 	//Core game data
 	this->ReadGameData();
@@ -162,7 +165,7 @@ inline void WowMemory::ReadObjectData() {
 	//Fishes out any wanted objects for reading, such as target or mouse-over information.
 	//Also, mining nodes.
 	DWORD_PTR currentObj, nextObj, firstObjAddress;
-	uint64_t currentObjGuid;
+	GameObject currentGameObj;
 
 	firstObjAddress = this->addressObjMgr + WOW_MEM_OBJMGR_FIRST;
 
@@ -171,13 +174,12 @@ inline void WowMemory::ReadObjectData() {
 
 	while (1) {
 
-		//Read the GUID.
-		DWORD_PTR currentObjGuidAddr = currentObj + WOW_MEM_OBJ_GUID;
-		ReadProcessMemory(this->processHnd, (void *)currentObjGuidAddr, &currentObjGuid, sizeof(currentObjGuid), 0);
+		//Read the GUID and object type.
+		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJ_GUID), &currentGameObj.guid, sizeof(currentGameObj.guid), 0);
+		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJ_TYPE), &currentGameObj.type, sizeof(currentGameObj.type), 0);
 
 		//Read the next object.
-		DWORD_PTR nextObjAddr = currentObj + WOW_MEM_OBJMGR_NEXT;
-		ReadProcessMemory(this->processHnd, (void *)nextObjAddr, &nextObj, sizeof(nextObj), 0);
+		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJMGR_NEXT), &nextObj, sizeof(nextObj), 0);
 
 		if (nextObj == currentObj || nextObj == 0x0) {
 			std::cout << "End of object manager\n";
@@ -185,21 +187,79 @@ inline void WowMemory::ReadObjectData() {
 		}
 
 		//Is the node a mining or herb type?
+		if (currentGameObj.type == WOW_OBJECT_TYPE_MINING) {
+			//std::cout << "Type: " << currentGameObj.type << " GUID: " << std::hex << currentGameObj.guid << "\n";
+			this->PrependMinableObject(currentObj);
+		}
 
 		//Is the node the same as the player target guid?
-		if (currentObjGuid == this->player.targetGuid) {
-			std::cout << "Found player target object: " << std::hex << currentObjGuid << "\n";
+		if (currentGameObj.guid == this->player.targetGuid) {
+			std::cout << "Found player target object: " << std::hex << currentGameObj.guid << "\n";
 		}
 
 		//Is the node the same as the mouse over guid?
-		if (currentObjGuid == this->game.mouseOverGuid) {
-			std::cout << "Found mouse over object: " << std::hex << currentObjGuid << "\n";
+		if (currentGameObj.guid == this->game.mouseOverGuid) {
+			std::cout << "Found mouse over object: " << std::hex << currentGameObj.guid << "\n";
 		}
 
 		//Increment for the loop
 		currentObj = nextObj;
 		
 	}
+
+}
+
+inline void WowMemory::PrependMinableObject(DWORD_PTR objAddress) {
+	
+	bool objectExists = false;
+	GatherObject *currentGatherObject = (GatherObject *)malloc(sizeof(GatherObject));
+
+	//Read the GUID.
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_GUID), &currentGatherObject->guid, sizeof(currentGatherObject->guid), 0);
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_TYPE), &currentGatherObject->type, sizeof(currentGatherObject->type), 0);
+
+	//Loop through existing mining objects.
+	GatherObject *nextGatherObject = this->firstGatherObject;
+	std::cout << std::hex << nextGatherObject << "\n";
+	
+	while (1) {
+		if (nextGatherObject == 0x0) {
+			std::cout << "Trigger empty\n";
+			//End of list
+			break;
+		}
+
+		std::cout << nextGatherObject->guid << ":" << currentGatherObject->guid << "\n";
+		if (nextGatherObject->guid == currentGatherObject->guid) {
+			//Already exists. Don't append, just update.
+			std::cout << "Match\n";
+			objectExists = true;
+			break;
+		}
+
+		nextGatherObject = nextGatherObject->nextObject;
+
+	}
+
+	if (objectExists == true) {
+		//Update existing object;
+		currentGatherObject = nextGatherObject;
+		std::cout << "Update " << std::hex << currentGatherObject->guid << "\n";
+	}
+	else {
+		//Inject the object.
+		currentGatherObject->nextObject = nextGatherObject;
+		this->firstGatherObject = currentGatherObject;
+		std::cout << "Create " << std::hex << currentGatherObject->guid << "\n";
+	}
+
+	system("PAUSE");
+
+}
+
+inline void WowMemory::ReadTargetData(DWORD_PTR objAddress) {
+
+	//Read target data and point PlayerObject to the object.
 
 }
 

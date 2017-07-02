@@ -31,6 +31,11 @@ struct PlayerAddresses {
 
 };
 
+struct GameObject {
+	uint64_t guid;
+	unsigned short type;
+};
+
 struct TargetObject {
 	char *name;
 	int classId;
@@ -46,13 +51,16 @@ struct TargetObject {
 };
 
 struct GatherObject {
-	int type;
+	uint64_t guid;
+	unsigned short type;
 	float x;
 	float y;
 	float z;
+	GatherObject *nextObject;
 };
 
 struct AllGameData {
 	PlayerObject *player;
 	TargetObject *target;
+	GatherObject *firstGatherObject;
 };
