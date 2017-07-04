@@ -4,6 +4,7 @@
 #include <iostream>
 #include <windows.h>
 #include <psapi.h>
+#include <ctime>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 
@@ -20,6 +21,7 @@ public:
 	void ReadObjectData();
 	void ReadTargetData(DWORD_PTR objAddress);
 	void PrependMinableObject(DWORD_PTR objAddress);
+	void GarbageCollector();
 	DWORD_PTR ProcGetBaseAddress(DWORD processId, HANDLE *processHandle);
 
 	//Data
@@ -115,10 +117,13 @@ inline void WowMemory::Update() {
 	//Object manager (Target data)
 	this->ReadObjectData();
 
+	//Run the garbage collector
+	this->GarbageCollector();
+
 	//Do memory things...
 	std::cout << "Zone: " << std::dec << this->game.zone << "\n";
-	std::cout << "Mouseover GUID: " << std::dec << this->game.mouseOverGuid << "\n";
-	std::cout << "X: " << this->player.x << "\n";
+	std::cout << "Mouseover GUID: " << std::hex << this->game.mouseOverGuid << "\n";
+	std::cout << "XYZ: " << this->player.x << ", " << this->player.y << ", " << this->player.z << "\n";
 	std::cout << "Target: " << this->player.targetGuid << "\n";
 
 }
@@ -199,7 +204,7 @@ inline void WowMemory::ReadObjectData() {
 
 		//Is the node the same as the mouse over guid?
 		if (currentGameObj.guid == this->game.mouseOverGuid) {
-			std::cout << "Found mouse over object: " << std::hex << currentGameObj.guid << "\n";
+			std::cout << "Found mouse over object: " << std::hex << currentGameObj.guid << " (Address: " << currentObj << ")\n";
 		}
 
 		//Increment for the loop
@@ -209,53 +214,104 @@ inline void WowMemory::ReadObjectData() {
 
 }
 
+inline void WowMemory::GarbageCollector() {
+
+	time_t diff = 0;
+	time_t currentTime = std::time(nullptr);
+	GatherObject *currentObj = this->firstGatherObject;
+	GatherObject *prevObj = 0x0;
+	GatherObject *nextObj = 0x0;
+
+	while (1) {
+
+		//No more in loop.
+		if (currentObj == 0x0) {
+			break;
+		}
+
+		nextObj = currentObj->nextObject;
+
+		//Check to see if it's stale.
+		diff = (currentTime - currentObj->lastSeen);
+		if ( diff >= WOW_GO_REMOVE_INACTIVE_SECONDS) {
+			std::cout << "Remove stale object entry " << std::hex << (void *)currentObj << ", inactive for: " << std::dec << diff << " seconds\n";
+			if (prevObj != 0x0) {
+				prevObj->nextObject = nextObj;
+			}
+			if (this->firstGatherObject == currentObj) {
+				this->firstGatherObject = nextObj;
+			}
+			free(currentObj);
+			currentObj = nextObj;
+			continue;
+		}
+
+		//Step to next child in list.
+		prevObj = currentObj;
+		currentObj = nextObj;
+
+	}
+
+}
+
 inline void WowMemory::PrependMinableObject(DWORD_PTR objAddress) {
 	
 	bool objectExists = false;
-	GatherObject *currentGatherObject = (GatherObject *)malloc(sizeof(GatherObject));
-
-	//Read the GUID.
-	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_GUID), &currentGatherObject->guid, sizeof(currentGatherObject->guid), 0);
-	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_TYPE), &currentGatherObject->type, sizeof(currentGatherObject->type), 0);
-
-	//Loop through existing mining objects.
-	GatherObject *nextGatherObject = this->firstGatherObject;
-	std::cout << std::hex << nextGatherObject << "\n";
+	time_t currentTime = std::time(nullptr);
+	GatherObject gatherObject;
 	
+	//Read the GUID.
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_GUID), &gatherObject.guid, sizeof(gatherObject.guid), 0);
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_TYPE), &gatherObject.type, sizeof(gatherObject.type), 0);
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_X), &gatherObject.x, sizeof(gatherObject.x), 0);
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_Y), &gatherObject.y, sizeof(gatherObject.y), 0);
+	ReadProcessMemory(this->processHnd, (void *)(objAddress + WOW_MEM_OBJ_Z), &gatherObject.z, sizeof(gatherObject.z), 0);
+	gatherObject.lastSeen = currentTime;
+	
+	GatherObject *currentObj = this->firstGatherObject;
+	bool matchFound = false;
+
 	while (1) {
-		if (nextGatherObject == 0x0) {
-			std::cout << "Trigger empty\n";
-			//End of list
+
+		//No more in loop.
+		if (currentObj == 0x0 ) {
 			break;
 		}
 
-		std::cout << nextGatherObject->guid << ":" << currentGatherObject->guid << "\n";
-		if (nextGatherObject->guid == currentGatherObject->guid) {
-			//Already exists. Don't append, just update.
-			std::cout << "Match\n";
-			objectExists = true;
+		//Already exists in list.
+		if (currentObj->guid == gatherObject.guid) {
+			matchFound = true;
 			break;
 		}
 
-		nextGatherObject = nextGatherObject->nextObject;
+		//Step to next child in list.
+		currentObj = currentObj->nextObject;
 
 	}
 
-	if (objectExists == true) {
-		//Update existing object;
-		currentGatherObject = nextGatherObject;
-		std::cout << "Update " << std::hex << currentGatherObject->guid << "\n";
+	if (matchFound) {
+		//Update.
+		//std::cout << "Updated: " << std::hex << (void *)currentObj << "\n";
+		currentObj->guid = gatherObject.guid;
+		currentObj->type = gatherObject.type;
+		currentObj->lastSeen = gatherObject.lastSeen;
 	}
 	else {
-		//Inject the object.
-		currentGatherObject->nextObject = nextGatherObject;
-		this->firstGatherObject = currentGatherObject;
-		std::cout << "Create " << std::hex << currentGatherObject->guid << "\n";
+		//Create
+		GatherObject *futureObject = (GatherObject *)malloc(sizeof(GatherObject));
+		futureObject->guid = gatherObject.guid;
+		futureObject->type = gatherObject.type;
+		futureObject->lastSeen = gatherObject.lastSeen;
+		futureObject->nextObject = this->firstGatherObject;
+		this->firstGatherObject = futureObject;
+		//std::cout << "Created: " << std::hex << (void *)futureObject << "\n";
 	}
 
-	system("PAUSE");
+	std::cout << "Current object type: " << std::dec << gatherObject.type << ", GUID: " << std::hex << gatherObject.guid << ", XYZ: " <<
+		std::dec << gatherObject.x << ", " << gatherObject.y << ", " << gatherObject.z << " last seen: " << std::dec << gatherObject.lastSeen << "\n";
 
 }
+
 
 inline void WowMemory::ReadTargetData(DWORD_PTR objAddress) {
 

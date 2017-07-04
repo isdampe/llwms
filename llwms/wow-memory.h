@@ -52,6 +52,7 @@ struct TargetObject {
 
 struct GatherObject {
 	uint64_t guid;
+	time_t lastSeen;
 	unsigned short type;
 	float x;
 	float y;
@@ -64,3 +65,5 @@ struct AllGameData {
 	TargetObject *target;
 	GatherObject *firstGatherObject;
 };
+
+#define WOW_GO_REMOVE_INACTIVE_SECONDS 5
