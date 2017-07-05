@@ -36,6 +36,8 @@
 #define WOW_MEM_OBJ_DESCRIPTORS 0x2C08
 #define WOW_MEM_OBJ_HEALTH WOW_MEM_OBJ_DESCRIPTORS
 #define WOW_MEM_OBJ_MAX_HEALTH WOW_MEM_OBJ_DESCRIPTORS + 0x20
+#define WOW_MEM_OBJ_DISPLAY_ID 0x558 //http://www.ownedcore.com/forums/world-of-warcraft/world-of-warcraft-bots-programs/wow-memory-editing/290318-list-mines-herb-display-ids.html
 #endif
 
 #define WOW_OBJECT_TYPE_MINING 0x5
+#define WOW_OBJECT_MINERAL_COPPER_ORE 310

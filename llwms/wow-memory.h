@@ -33,7 +33,8 @@ struct PlayerAddresses {
 
 struct GameObject {
 	uint64_t guid;
-	unsigned short type;
+	unsigned int type;
+	unsigned int displayId;
 };
 
 struct TargetObject {
@@ -53,7 +54,7 @@ struct TargetObject {
 struct GatherObject {
 	uint64_t guid;
 	time_t lastSeen;
-	unsigned short type;
+	unsigned int type;
 	float x;
 	float y;
 	float z;

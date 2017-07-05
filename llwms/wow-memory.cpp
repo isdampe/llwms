@@ -182,6 +182,7 @@ inline void WowMemory::ReadObjectData() {
 		//Read the GUID and object type.
 		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJ_GUID), &currentGameObj.guid, sizeof(currentGameObj.guid), 0);
 		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJ_TYPE), &currentGameObj.type, sizeof(currentGameObj.type), 0);
+		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJ_DISPLAY_ID), &currentGameObj.displayId, sizeof(currentGameObj.displayId), 0);
 
 		//Read the next object.
 		ReadProcessMemory(this->processHnd, (void *)(currentObj + WOW_MEM_OBJMGR_NEXT), &nextObj, sizeof(nextObj), 0);
@@ -192,6 +193,7 @@ inline void WowMemory::ReadObjectData() {
 		}
 
 		//Is the node a mining or herb type?
+		//Dev note - Replace this, check to see if object.displayId is a known mineral
 		if (currentGameObj.type == WOW_OBJECT_TYPE_MINING) {
 			//std::cout << "Type: " << currentGameObj.type << " GUID: " << std::hex << currentGameObj.guid << "\n";
 			this->PrependMinableObject(currentObj);
@@ -204,7 +206,7 @@ inline void WowMemory::ReadObjectData() {
 
 		//Is the node the same as the mouse over guid?
 		if (currentGameObj.guid == this->game.mouseOverGuid) {
-			std::cout << "Found mouse over object: " << std::hex << currentGameObj.guid << " (Address: " << currentObj << ")\n";
+			std::cout << "Found mouse over object: " << std::hex << currentGameObj.guid << " (Address: " << currentObj << ", displayId: " << std::dec << currentGameObj.displayId << ")\n";
 		}
 
 		//Increment for the loop
